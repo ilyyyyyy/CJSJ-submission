@@ -49,28 +49,32 @@ def table2(un, base):
 
 
 def table3(un, an, base):
-    """Order manipulation, one row per direction: samples moved, A defined, median A.
-    The first row is movement under repetition alone, the threshold every
-    movement count is read against."""
+    """Order manipulation, one row per direction, five columns:
+    moved, and median A with the number of samples it rests on in brackets.
+    "Q <- P" means rating Q asked after question P. The first row is movement
+    under repetition alone, the threshold every movement count is read against."""
+    def median_n(d):
+        n = int(d.A.notna().sum())
+        return f"{d.A.median():.2f} ({n})" if n else "— (0)"
+
     A = st.anchoring(un, an)
-    rows = [{"direction": "movement threshold: test-retest moved",
-             **{f"{v}: {c}": (base[v]["moved"] if c == "moved" else "")
-                for v in cfg.VERSIONS for c in ("moved", "A defined", "median A")}}]
+    rows = [{"direction": "repetition only",
+             **{f"{v}: {c}": (base[v]["moved"] if c == "moved" else "—")
+                for v in cfg.VERSIONS for c in ("moved", "median A (n)")}}]
     for (pair, q, p), g in A.groupby(["pair", "question", "anchor"], sort=False):
-        r = {"direction": f"{q} anchored on {p}"}
+        r = {"direction": f"{q} ← {p}"}
         for v in cfg.VERSIONS:
             d = g[g.version == v]
             r[f"{v}: moved"] = int((d.change.abs() >= cfg.MOVE_CUTOFF).sum())
-            r[f"{v}: A defined"] = int(d.A.notna().sum())
-            r[f"{v}: median A"] = d.A.median()
+            r[f"{v}: median A (n)"] = median_n(d)
         rows.append(r)
 
     # Verdict anchored on the composite: movement only; A is not computed for this
     # direction (fractional denominator), and its pooled closure is in Table 4.
     p3 = st.pair3_order(un, an)
-    rows.append({"direction": "verdict anchored on composite",
-                 **{f"{v}: {c}": (p3[v]["verdict moved"] if c == "moved" else "")
-                    for v in cfg.VERSIONS for c in ("moved", "A defined", "median A")}})
+    rows.append({"direction": "verdict ← composite",
+                 **{f"{v}: {c}": (p3[v]["verdict moved"] if c == "moved" else "—")
+                    for v in cfg.VERSIONS for c in ("moved", "median A (n)")}})
     return pd.DataFrame(rows)
 
 
@@ -104,24 +108,21 @@ def table5(un, reps):
 
 
 def human_positions(cg, hg):
-    """How often Claude's gap sits below, above or on the human gap."""
+    """Human comparison: per text sample, is Claude's gap below, above or on the
+    human gap? Returns the counts and the merged gaps used for Figures 3 and 4."""
     m = cg.merge(hg, on=["pair", "sample", "version"], suffixes=("_claude", "_human"))
-    if m.empty:
-        raise ValueError(
-            "No text sample matched between Claude's gaps and the human gaps.\n"
-            f"  Claude samples/versions: {sorted(cg['sample'].unique())} {sorted(cg['version'].unique())}\n"
-            f"  Human samples/versions:  {sorted(hg['sample'].unique())} {sorted(hg['version'].unique())}\n"
-            "Check that the human tabs use the same Passage numbers and Genre labels as the model tabs.")
     rows = []
     for (pair, v), d in m.groupby(["pair", "version"]):
         diff = d.gap_claude - d.gap_human
-        rows.append({"pair": pair, "version": v, "below": int((diff < 0).sum()),
+        rows.append({"question pair": {1: "ethical integrity", 2: "consensus deferral"}[pair],
+                     "version": v, "below": int((diff < 0).sum()),
                      "above": int((diff > 0).sum()), "on": int((diff == 0).sum())})
     return pd.DataFrame(rows), m
 
 
 def replicate_agreement(reps, base):
-    """Discussion: agreement among the three unanchored ethical ratings."""
+    """Agreement among the three unanchored ethical ratings, one per question pair,
+    against the test-retest baseline. Backs the Discussion's limitation."""
     rows = []
     for v in cfg.VERSIONS:
         d = reps[reps.version == v]
@@ -135,7 +136,7 @@ def replicate_agreement(reps, base):
 def main():
     io.ensure_dirs()
     print("Loading...")
-    llm, base_raw, hum = io.load_llm(), io.load_baseline(), io.load_human_means()
+    llm, base_raw, hum = io.load_llm(), io.load_baseline(), io.load_human()
     un, an = st.wide(llm, "unanchored"), st.wide(llm, "anchored")
     base = st.baseline(base_raw)
     reps = st.ethical_replicates(un)
@@ -145,9 +146,8 @@ def main():
     io.save_table(table3(un, an, base), "table3_order")
     io.save_table(table4(un, an), "table4_pair3_order_summary")
     io.save_table(table5(un, reps), "table5_genre")
-    if hum is not None:
-        positions, merged = human_positions(st.claude_gaps(un), st.human_gaps(hum))
-        io.save_table(positions, "human_positions")
+    positions, merged = human_positions(st.claude_gaps(un), st.human_gaps(hum))
+    io.save_table(positions, "human_positions")
     io.save_table(replicate_agreement(reps, base), "discussion_ethical_replicates")
 
     print("Figures...")
@@ -155,25 +155,21 @@ def main():
     for v in cfg.VERSIONS:
         d = st.pair_data(un, 1, v)
         panels.append((v.capitalize(), d.ethical, d.agreement,
-                       f"τ-b = {st.tau_b(d.ethical, d.agreement):.2f} "
-                       f"(ceiling {base[v]['ceiling']:.2f})"))
-    pl.paired_scatter(panels, "Ethical rating (unanchored)",
-                      "Agreement rating (unanchored)", "figure1_integrity")
+                       f"Correlation {st.tau_b(d.ethical, d.agreement):.2f}, "
+                       f"ceiling {base[v]['ceiling']:.2f}"))
+    pl.paired_scatter(panels, "Unanchored ethical rating",
+                      "Unanchored agreement rating", "figure1_integrity")
 
     taus = {v: {f: st.tau_b(*st.pair_data(un, 3, v)[[f, "verdict"]].T.values)
                 for f in cfg.FOUNDATIONS} for v in cfg.VERSIONS}
     pl.foundation_bars(taus, "figure2_foundation_profile")
 
-    if hum is None:
-        print("No human_group_means.csv in data/, so Figures 3-4 are skipped.")
-        print("Done. Outputs are in", cfg.OUTPUT_DIR)
-        return
     for pair, fig, label in [(1, 3, "integrity"), (2, 4, "consensus")]:
         panels = []
         for v in cfg.VERSIONS:
             d = merged[(merged.pair == pair) & (merged.version == v)]
             panels.append((v.capitalize(), d.gap_human, d.gap_claude, None))
-        pl.paired_scatter(panels, "Human gap (group means)", "Claude gap (unanchored)",
+        pl.paired_scatter(panels, "Human gap between group means", "Claude's gap between unanchored ratings",
                           f"figure{fig}_human_{label}", rating_scale=False)
     print("Done. Outputs are in", cfg.OUTPUT_DIR)
 
