@@ -51,7 +51,7 @@ def table2(un, base):
 def table3(un, an, base):
     """Order manipulation, one row per direction, five columns:
     moved, and median A with the number of samples it rests on in brackets.
-    "Q <- P" means rating Q asked after question P. The first row is movement
+    "Q anchored on P" means rating Q asked after question P. The first row is movement
     under repetition alone, the threshold every movement count is read against."""
     def median_n(d):
         n = int(d.A.notna().sum())
@@ -62,7 +62,7 @@ def table3(un, an, base):
              **{f"{v}: {c}": (base[v]["moved"] if c == "moved" else "—")
                 for v in cfg.VERSIONS for c in ("moved", "median A (n)")}}]
     for (pair, q, p), g in A.groupby(["pair", "question", "anchor"], sort=False):
-        r = {"direction": f"{q} ← {p}"}
+        r = {"direction": f"{q} anchored on {p}"}
         for v in cfg.VERSIONS:
             d = g[g.version == v]
             r[f"{v}: moved"] = int((d.change.abs() >= cfg.MOVE_CUTOFF).sum())
@@ -72,7 +72,7 @@ def table3(un, an, base):
     # Verdict anchored on the composite: movement only; A is not computed for this
     # direction (fractional denominator), and its pooled closure is in Table 4.
     p3 = st.pair3_order(un, an)
-    rows.append({"direction": "verdict ← composite",
+    rows.append({"direction": "verdict anchored on composite",
                  **{f"{v}: {c}": (p3[v]["verdict moved"] if c == "moved" else "—")
                     for v in cfg.VERSIONS for c in ("moved", "median A (n)")}})
     return pd.DataFrame(rows)
