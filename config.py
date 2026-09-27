@@ -34,3 +34,5 @@ POOLED_CUTOFF = MOVE_CUTOFF / np.sqrt(3)
 # Figures
 TEAL, BROWN = "#0F6B62", "#9C5B38"
 JITTER = 0.06                 # small offset so tied ratings stay visible
+
+FIGURE_LAYOUT = "stacked"   # two-panel figures: original above fable, one column wide
