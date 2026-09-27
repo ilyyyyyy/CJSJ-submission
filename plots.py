@@ -43,7 +43,7 @@ def _clean(x, y):
 
 
 def paired_scatter(panels, xlabel, ylabel, name, rating_scale=True):
-    """Two scatter panels side by side (original, fable), full text width, each
+    """Two scatter panels (original, fable) at single-column width, each
     with the equality line y = x. panels: [(title, x, y, note_or_None), ...].
     rating_scale fixes both axes to 1-6; otherwise both panels share limits
     fitted to the data (used for gaps)."""
@@ -54,7 +54,12 @@ def paired_scatter(panels, xlabel, ylabel, name, rating_scale=True):
         allv = np.concatenate([np.concatenate([x, y]) for _, x, y, _ in data])
         lo, hi = allv.min() - 0.5, allv.max() + 0.5
 
-    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH, TEXT_WIDTH / 2), sharey=True)
+    # One column wide. "stacked": original above fable, larger panels.
+    # "side_by_side": both panels in a row, more compact but smaller.
+    if cfg.FIGURE_LAYOUT == "stacked":
+        fig, axes = plt.subplots(2, 1, figsize=(COLUMN_WIDTH, COLUMN_WIDTH * 1.9), sharex=True)
+    else:
+        fig, axes = plt.subplots(1, 2, figsize=(COLUMN_WIDTH, COLUMN_WIDTH * 0.6), sharey=True)
     rng = np.random.default_rng(0)
     jit = lambda a: a + rng.uniform(-cfg.JITTER, cfg.JITTER, len(a))
     for ax, (title, x, y, note) in zip(axes, data):
@@ -66,10 +71,15 @@ def paired_scatter(panels, xlabel, ylabel, name, rating_scale=True):
             ax.set_xticks(range(1, 7)); ax.set_yticks(range(1, 7))
         ax.set_aspect("equal")
         ax.set_title(title)
-        ax.set_xlabel(xlabel)
+        if cfg.FIGURE_LAYOUT != "stacked" or ax is axes[-1]:
+            ax.set_xlabel(xlabel)
+        if cfg.FIGURE_LAYOUT == "stacked":
+            ax.set_ylabel(ylabel)
         ax.grid(alpha=0.25)
-        _note(ax, (note + "\n" if note else "") + f"n = {len(x)}")
-    axes[0].set_ylabel(ylabel)
+        if note:
+            _note(ax, note)
+    if cfg.FIGURE_LAYOUT != "stacked":
+        axes[0].set_ylabel(ylabel)
     fig.tight_layout()
     _save(fig, name)
 
@@ -87,7 +97,7 @@ def foundation_bars(taus, name):
         print(f"  warning: a foundation correlation is negative ({lowest:.2f}) "
               f"and falls below the 0-1 axis")
     ax.set_xticks(xs); ax.set_xticklabels(cfg.FOUNDATIONS)
-    ax.set_ylabel("Correlation with verdict (Kendall's τ-b)")
+    ax.set_ylabel("Correlation with verdict")
     ax.set_ylim(0, 1)
     ax.legend(frameon=False); ax.grid(axis="y", alpha=0.25)
     fig.tight_layout()
