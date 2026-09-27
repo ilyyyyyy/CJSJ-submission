@@ -69,3 +69,8 @@ def save_table(df, name):
     path = os.path.join(cfg.OUTPUT_DIR, "tables", name + ".csv")
     df.map(_fmt).to_csv(path, index=False)
     print("  table :", path)
+
+
+def load_human():
+    """Same name as in the author's local copy, so run.py is identical in both."""
+    return load_human_means()
