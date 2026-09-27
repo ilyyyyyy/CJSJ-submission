@@ -59,9 +59,14 @@ def ensure_dirs():
 
 
 def _fmt(x):
-    """Whole numbers without decimals, others to two places, missing as blank."""
+    """Counts as whole numbers; everything else to exactly two decimals, with a
+    true minus sign (0.70, not 0.7; −0.10, not -0.1). Missing values as blank."""
     if isinstance(x, (int, float)) and not isinstance(x, bool):
-        return "" if x != x else f"{round(float(x), 2) + 0.0:g}"   # + 0.0 turns -0 into 0
+        if x != x:
+            return ""
+        if float(x).is_integer():
+            return str(int(x))
+        return f"{round(float(x), 2) + 0.0:.2f}".replace("-", "−")   # + 0.0 turns -0 into 0
     return x
 
 
